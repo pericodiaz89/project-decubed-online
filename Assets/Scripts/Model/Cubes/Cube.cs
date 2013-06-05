@@ -19,6 +19,7 @@ public class Cube : GameEntity, IClickable{
 	private SpriteSheet spriteSheet;
 	public AudioClip[] MovementSounds;
 	public AudioClip[] ClickSouds;
+	public bool networkSelected = false;
 	//private bool justSelected = false;
 	#endregion
 	
@@ -35,6 +36,7 @@ public class Cube : GameEntity, IClickable{
 		if (!Level.Singleton.ContainsElement (nextPosition)) {
 			Level.Singleton.RemoveEntity (new Vector3Int (transform.position));
 			Level.Singleton.AddEntity (this, nextPosition);
+			Level.Singleton.MoveCube(transform.position,nextPosition.ToVector3);
 			CubeAnimations.AnimateMove (gameObject, Vector3.down, nextPosition.ToVector3);
 		}
 	}
@@ -231,6 +233,15 @@ public class Cube : GameEntity, IClickable{
 		}
 		set {
 			spriteSheet = value;
+		}
+	}
+	
+	public bool Selected {
+		get {
+			return this.selected;
+		}
+		set {
+			selected = value;
 		}
 	}
 	

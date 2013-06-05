@@ -28,10 +28,6 @@ public class Level : MonoBehaviour
     private bool isMenu = false;
     private bool isExiting = false;
     private CameraDecubeLevel levelCamera;
-	/// <summary>
-	/// x -> inf limit in y and x.
-	/// y -> sup limit in y and x
-	/// </summary>
 	private static Vector2 dimension = new Vector2(0, 10);
 	
     private TextReader tr;
@@ -42,31 +38,12 @@ public class Level : MonoBehaviour
 
     private void restartLevel()
     {
-        if(!isMenu){
-            Lumos.Event("Restarted Level" + Application.loadedLevelName + ", Remaining sensors", sensorsLeft);
-            Lumos.Event("Restarted Level" + Application.loadedLevelName + ", Time", Time.timeSinceLevelLoad);
-            Lumos.Event("Restarted Level" + Application.loadedLevelName + ", StepCount", stepCount);
-        }
         Application.LoadLevel(Application.loadedLevel);
     }
 
     private void ExitLevel()
     {
-        if (!isMenu)
-        {
-            if (sensorsLeft != 0)
-            {
-                Lumos.Event("Quit Level " + Application.loadedLevelName + ", Remaining sensors", sensorsLeft);
-                Lumos.Event("Quit Level " + Application.loadedLevelName + ", Stepcount", stepCount);
-                Lumos.Event("Quit Level " + Application.loadedLevelName + ", Time", Time.timeSinceLevelLoad);
-            }
-            else
-            {
-                Lumos.Event("Solved Level " + Application.loadedLevelName + ", Stepcount", stepCount);
-                Lumos.Event("Solved Level " + Application.loadedLevelName + ", Time", Time.timeSinceLevelLoad);
-            }
-        }
-        Application.LoadLevel("WorldSelector");
+        Application.LoadLevel("MenuDecubeOnline");
     }
 
 	#region Entities Dictionary Management
@@ -209,15 +186,71 @@ public class Level : MonoBehaviour
 	
 	#region Monobehaviours Methods
 	
+	#region Networking
+	
+	public static string ip = "127.0.0.1";
+	public static string port = "25000";
+	ConnectionTesterStatus status;
+	NetworkView networkView;
+	public static bool server = true;
+ 
+	void LaunchServer ()
+	{
+		Network.incomingPassword = "diaz";
+		bool useNat = !Network.HavePublicAddress();
+		Network.InitializeServer( 8,25000,false);
+	}
+	
+	void ConnectServer ()
+	{
+		Network.Connect (ip, int.Parse(port),"diaz");
+	}
+	
+	[RPC]
+	void MoveCubeTo(Vector3 cubePosition, Vector3 cubeNextPosition){
+		Vector3Int position  = new Vector3Int(cubePosition);
+		if (entities.ContainsKey(position)){
+			Cube cube = (Cube)entities[position];
+			cube.MoveTo(new Vector3Int(cubeNextPosition));
+		}else{
+			Debug.Log("Wrong Movement");
+		}
+	}
+	
+	public void MoveCube(Vector3 cubePosition, Vector3 cubeNextPosition){
+		networkView.RPC("MoveCubeTo",RPCMode.All,cubePosition,cubeNextPosition);
+	}
+	
+	[RPC]
+	void RemoveCube(Vector3 cubePosition){
+		this.RemoveEntity(new Vector3Int(cubePosition));
+	}
+	
+	[RPC]
+	void PlayerConnected(){
+		mngr.enabled = true;
+	}
+	
+	#endregion
+	
+	public MouseInputManager mngr;
+	public GameObject cam;
+	
 	void Awake ()
 	{
+		networkView = GetComponent<NetworkView>();
+		cam = GameObject.Find("Camera");
+		mngr = cam.GetComponent<MouseInputManager>();
+		if (server){
+			LaunchServer();
+			mngr.enabled = false;
+			StartCoroutine(checkPlayers());
+		}else{
+			ConnectServer();
+		}
         if (Application.loadedLevelName == "MainMenu" || Application.loadedLevelName == "Options" || Application.loadedLevelName == "PlanetSelector" || Application.loadedLevelName == "ProfileSelector")
         {
             isMenu = true;
-        }
-        if (!isMenu)
-        {
-            Lumos.Event("Started Level " + Application.loadedLevelName);
         }
 		entities = new Dictionary<Vector3Int, GameEntity> (new Vector3EqualityComparer ());
 		sensorSpaces = new Dictionary<Vector3Int, List<BasicSensor>> (new Vector3EqualityComparer ());
@@ -261,27 +294,30 @@ public class Level : MonoBehaviour
             GUI.skin = skin;
         }
 
+		if (!mngr.enabled){
+			GUI.Label(new Rect(Screen.width/4,50,500,70),"Waiting for Player...");
+		}
+
         float d = images[0].width * 0.75f;
         if (GUI.Button(new Rect(5, 5, d, d), images[0]))
         {
             ExitLevel();
         }
 
-        if (GUI.Button(new Rect(d + 10, 5, d, d), images[2]))
-        {
-            restartLevel();
-        }
-
-        if (GUI.Button(new Rect(Screen.width - d -5, Screen.height - d - 5, d, d), images[1])) 
-        {
-            showHint = !showHint;
-        }
-        
+//        if (GUI.Button(new Rect(d + 10, 5, d, d), images[2]))
+//        {
+//            restartLevel();
+//        }
+//
+//        if (GUI.Button(new Rect(Screen.width - d -5, Screen.height - d - 5, d, d), images[1])) 
+//        {
+//            showHint = !showHint;
+//        }
+//        
         float hintWidth = 512.0f * 0.75f , hintHeight = 128.0f * 0.75f;
         if (showHint)
         {
             if(!askedForHint){
-                Lumos.Event("Asked for hint on level " + Application.loadedLevelName, Time.timeSinceLevelLoad);
                 askedForHint = true;
             }
             //Quemo el tamaño de la textura de fondo
@@ -297,6 +333,19 @@ public class Level : MonoBehaviour
             GUI.Label(new Rect(0, 20, Screen.width, 80), "Ganaste!!");
 			GUI.Label(new Rect(0, 70, Screen.width, 80), "Numero de pasos: " + stepCount);
         }
+        
+        GUI.Label(new Rect( 50, Screen.height - 100,200,70),"P." + Network.connections.Length);
+    }
+    
+    IEnumerator checkPlayers(){
+    	while (true){
+        	if (Network.connections.Length > 0){
+    			mngr.enabled = true;
+	    	}else{
+	    		mngr.enabled = false;
+	    	}
+	    	yield return new WaitForSeconds(3);
+    	}
     }
 
 	#endregion
@@ -322,7 +371,9 @@ public class Level : MonoBehaviour
         {
             if (singleton == null)
             {
-                singleton = new GameObject("Level").AddComponent<Level>();
+            	GameObject lvl = new GameObject("Level");
+                lvl.AddComponent<NetworkView>();
+                singleton = lvl.AddComponent<Level>();
             }
             return singleton;
         }
