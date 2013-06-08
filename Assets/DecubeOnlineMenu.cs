@@ -54,7 +54,7 @@ public class DecubeOnlineMenu : MonoBehaviour {
     		yield return new WaitForSeconds(0.1f);
     	}
     	if (access.text.Equals("Success")){
-    	Application.LoadLevel("1");
+    		Application.LoadLevel("1");
     	}else{
     		checking = false;
     	}
